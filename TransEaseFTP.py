@@ -3,15 +3,16 @@ import sys
 import logging
 import configparser
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-                            QLabel, QPushButton, QTextEdit, QGroupBox, QMessageBox,
-                            QFileDialog, QStatusBar, QLineEdit, QSystemTrayIcon, QMenu, 
-                            QAction, QStyle, QTabWidget, QComboBox, QSpinBox, QCheckBox)
+                             QLabel, QPushButton, QTextEdit, QGroupBox, QMessageBox,
+                             QFileDialog, QStatusBar, QLineEdit, QSystemTrayIcon, QMenu,
+                             QAction, QStyle, QTabWidget, QComboBox, QSpinBox, QCheckBox)
 from PyQt5.QtCore import Qt, pyqtSignal, QObject, QThread
 from PyQt5.QtGui import QTextCursor, QFont, QIcon, QPixmap
 from pyftpdlib.authorizers import DummyAuthorizer
 from pyftpdlib.handlers import FTPHandler
 from pyftpdlib.servers import FTPServer
 from typing import Dict, Any, Optional
+
 
 class FTPSignals(QObject):
     """集中管理FTP服务器信号"""
@@ -21,6 +22,7 @@ class FTPSignals(QObject):
     server_started = pyqtSignal()
     server_stopped = pyqtSignal()
     error_occurred = pyqtSignal(str)
+
 
 class FTPConfigManager:
     """带有验证的增强型配置管理"""
@@ -51,7 +53,7 @@ class FTPConfigManager:
             self.create_default_config()
 
         self.config.read(self.config_path, encoding='utf-8')
-        
+
         # 确保所有配置项都存在
         for section, options in self.DEFAULT_CONFIG.items():
             if not self.config.has_section(section):
@@ -70,7 +72,7 @@ class FTPConfigManager:
             self.config.add_section(section)
             for key, value in options.items():
                 self.config.set(section, key, value)
-        
+
         with open(self.config_path, 'w', encoding='utf-8') as f:
             self.config.write(f)
 
@@ -94,15 +96,16 @@ class FTPConfigManager:
             for section, options in settings.items():
                 for key, value in options.items():
                     self.config.set(section, key, str(value))
-            
+
             with open(self.config_path, 'w', encoding='utf-8') as f:
                 self.config.write(f)
-            
+
             self.load_config()
             return True
         except Exception as e:
             logging.error(f"保存配置失败: {e}")
             return False
+
 
 class FTPUserManager:
     """FTP用户管理"""
@@ -125,6 +128,7 @@ class FTPUserManager:
         except Exception as e:
             logging.error(f"添加用户失败: {e}")
             return False
+
 
 class FTPServerThread(QThread):
     """线程安全的FTP服务器实现"""
@@ -152,8 +156,12 @@ class FTPServerThread(QThread):
     def stop(self) -> None:
         """优雅地停止FTP服务器"""
         if self.server and self._running:
-            self.server.close_all()
+            try:
+                self.server.close_all()
+            except Exception as e:
+                logging.error(f"关闭服务器时出错: {e}")
             self._running = False
+
 
 class WindowsFTPHandler(FTPHandler):
     """支持GB18030编码的Windows优化FTP处理器"""
@@ -165,20 +173,21 @@ class WindowsFTPHandler(FTPHandler):
         self.permit_privileged_ports = True
         self.permit_foreign_addresses = True
         self.unicode_errors = 'replace'
-        
+
     def decode(self, bytes):
         """重写解码方法以支持GB18030"""
         try:
             return bytes.decode(self.encoding, errors=self.unicode_errors)
         except UnicodeDecodeError:
             return bytes.decode('latin1', errors=self.unicode_errors)
-            
+
     def encode(self, string):
         """重写编码方法以支持GB18030"""
         try:
             return string.encode(self.encoding, errors=self.unicode_errors)
         except UnicodeEncodeError:
             return string.encode('latin1', errors=self.unicode_errors)
+
 
 class FTPLogger(logging.Handler):
     """用于GUI集成的自定义日志处理器"""
@@ -192,25 +201,26 @@ class FTPLogger(logging.Handler):
         log_entry = self.format(record)
         self.signals.log_received.emit(log_entry)
 
+
 class FTPMainWindow(QMainWindow):
     """具有完整功能的主应用程序窗口"""
     def __init__(self, config_path='config.ini'):
         super().__init__()
         self.setWindowTitle("FTP服务器管理工具(优化版)")
         self.resize(900, 700)
-        
+
         # 初始化组件
         self.config = FTPConfigManager(config_path)
         self.signals = FTPSignals()
         self.server_thread = None
         self.user_manager = FTPUserManager(self.config)
-        
+
         # 设置UI和连接
         self._setup_ui()
         self._setup_logging()
         self._setup_connections()
         self._setup_tray_icon()
-        
+
         # 初始UI状态
         self._update_ui_state(False)
 
@@ -218,14 +228,14 @@ class FTPMainWindow(QMainWindow):
         """初始化用户界面"""
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-        
+
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(10, 10, 10, 10)
-        
+
         # 创建标签页界面
         tab_widget = QTabWidget()
         main_layout.addWidget(tab_widget)
-        
+
         # 服务器控制标签页
         self._setup_server_tab(tab_widget)
         # 配置标签页
@@ -234,12 +244,12 @@ class FTPMainWindow(QMainWindow):
         self._setup_users_tab(tab_widget)
         # 日志标签页
         self._setup_log_tab(tab_widget)
-        
+
         # 带有连接计数器的状态栏
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
         self.status_bar.showMessage("就绪")
-        
+
         self.connections_label = QLabel("连接数: 0")
         self.status_bar.addPermanentWidget(self.connections_label)
 
@@ -247,46 +257,46 @@ class FTPMainWindow(QMainWindow):
         """设置服务器控制标签页"""
         server_tab = QWidget()
         layout = QVBoxLayout(server_tab)
-        
+
         # 服务器信息组
         info_group = QGroupBox("服务器信息")
         info_layout = QVBoxLayout(info_group)
-        
+
         self.server_status = QLabel("状态: 已停止")
         self.server_address = QLabel(f"地址: 0.0.0.0:{self.config.get('general', 'port')}")
         self.server_root = QLabel(f"根目录: {self.config.get('general', 'root_path')}")
-        
+
         info_layout.addWidget(self.server_status)
         info_layout.addWidget(self.server_address)
         info_layout.addWidget(self.server_root)
-        
+
         # 控制按钮组
         control_group = QGroupBox("控制")
         control_layout = QHBoxLayout(control_group)
-        
+
         self.start_btn = QPushButton("启动")
         self.start_btn.clicked.connect(self._toggle_server)
-        
+
         select_dir_btn = QPushButton("选择根目录")
         select_dir_btn.clicked.connect(self._select_root_dir)
-        
+
         control_layout.addWidget(self.start_btn)
         control_layout.addWidget(select_dir_btn)
-        
+
         layout.addWidget(info_group)
         layout.addWidget(control_group)
         layout.addStretch()
-        
+
         tab_widget.addTab(server_tab, "服务器")
 
     def _setup_config_tab(self, tab_widget: QTabWidget) -> None:
         """设置配置标签页"""
         config_tab = QWidget()
         layout = QVBoxLayout(config_tab)
-        
+
         form_group = QGroupBox("基本配置")
         form_layout = QVBoxLayout(form_group)
-        
+
         # 端口设置
         port_layout = QHBoxLayout()
         port_layout.addWidget(QLabel("端口:"))
@@ -295,7 +305,7 @@ class FTPMainWindow(QMainWindow):
         self.port_spin.setValue(self.config.get('general', 'port'))
         port_layout.addWidget(self.port_spin)
         form_layout.addLayout(port_layout)
-        
+
         # 最大连接数
         max_conn_layout = QHBoxLayout()
         max_conn_layout.addWidget(QLabel("最大连接数:"))
@@ -304,7 +314,7 @@ class FTPMainWindow(QMainWindow):
         self.max_conn_spin.setValue(self.config.get('general', 'max_connections'))
         max_conn_layout.addWidget(self.max_conn_spin)
         form_layout.addLayout(max_conn_layout)
-        
+
         # 超时设置
         timeout_layout = QHBoxLayout()
         timeout_layout.addWidget(QLabel("超时(秒):"))
@@ -313,7 +323,7 @@ class FTPMainWindow(QMainWindow):
         self.timeout_spin.setValue(self.config.get('general', 'timeout'))
         timeout_layout.addWidget(self.timeout_spin)
         form_layout.addLayout(timeout_layout)
-        
+
         # 编码设置
         encoding_layout = QHBoxLayout()
         encoding_layout.addWidget(QLabel("编码:"))
@@ -322,7 +332,7 @@ class FTPMainWindow(QMainWindow):
         self.encoding_combo.setCurrentText(self.config.get('general', 'encoding'))
         encoding_layout.addWidget(self.encoding_combo)
         form_layout.addLayout(encoding_layout)
-        
+
         # 日志级别设置
         log_level_layout = QHBoxLayout()
         log_level_layout.addWidget(QLabel("日志级别:"))
@@ -331,65 +341,65 @@ class FTPMainWindow(QMainWindow):
         self.log_level_combo.setCurrentText(self.config.get('general', 'log_level'))
         log_level_layout.addWidget(self.log_level_combo)
         form_layout.addLayout(log_level_layout)
-        
+
         # 日志保存设置
         self.save_log_check = QCheckBox("保存日志到文件")
         self.save_log_check.setChecked(self.config.get('general', 'save_log'))
         form_layout.addWidget(self.save_log_check)
-        
+
         # 保存按钮
         save_btn = QPushButton("保存配置")
         save_btn.clicked.connect(self._save_settings)
         form_layout.addWidget(save_btn)
-        
+
         layout.addWidget(form_group)
         layout.addStretch()
-        
+
         tab_widget.addTab(config_tab, "配置")
 
     def _setup_users_tab(self, tab_widget: QTabWidget) -> None:
         """设置用户标签页(预留未来扩展)"""
         users_tab = QWidget()
         layout = QVBoxLayout(users_tab)
-        
+
         users_group = QGroupBox("用户管理")
         users_layout = QVBoxLayout(users_group)
-        
+
         # 预留未来用户管理UI
         placeholder = QLabel("用户管理功能即将推出")
         placeholder.setAlignment(Qt.AlignCenter)
         users_layout.addWidget(placeholder)
-        
+
         layout.addWidget(users_group)
         layout.addStretch()
-        
+
         tab_widget.addTab(users_tab, "用户")
 
     def _setup_log_tab(self, tab_widget: QTabWidget) -> None:
         """设置日志标签页"""
         log_tab = QWidget()
         layout = QVBoxLayout(log_tab)
-        
+
         log_group = QGroupBox("服务器日志")
         log_layout = QVBoxLayout(log_group)
-        
+
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
         self.log_text.setFont(QFont("Consolas", 10))
-        
+
         # 日志控制
         log_control_layout = QHBoxLayout()
         self.clear_log_btn = QPushButton("清空日志")
         self.clear_log_btn.clicked.connect(lambda: self.log_text.clear())
-        
+
         log_control_layout.addWidget(self.clear_log_btn)
         log_control_layout.addStretch()
-        
+
         log_layout.addLayout(log_control_layout)
         log_layout.addWidget(self.log_text)
-        
+
         layout.addWidget(log_group)
-        
+
         tab_widget.addTab(log_tab, "日志")
 
     def _setup_logging(self) -> None:
@@ -397,11 +407,11 @@ class FTPMainWindow(QMainWindow):
         logger = logging.getLogger()
         logger.handlers.clear()
         logger.setLevel(self.config.get('general', 'log_level'))
-        
+
         # GUI日志处理器
         gui_handler = FTPLogger(self.signals)
         logger.addHandler(gui_handler)
-        
+
         # 如果启用则添加文件日志处理器
         if self.config.get('general', 'save_log'):
             log_file = os.path.join(os.path.dirname(self.config.config_path), 'ftp_server.log')
@@ -422,30 +432,30 @@ class FTPMainWindow(QMainWindow):
         """配置系统托盘图标"""
         self.tray_icon = QSystemTrayIcon(self)
         self.tray_icon.setIcon(self.style().standardIcon(QStyle.SP_ComputerIcon))
-        
+
         # 创建托盘菜单
         tray_menu = QMenu()
-        
+
         self.toggle_action = tray_menu.addAction("启动服务器")
         self.toggle_action.triggered.connect(self._toggle_server)
-        
+
         tray_menu.addSeparator()
-        
+
         show_action = tray_menu.addAction("显示窗口")
         show_action.triggered.connect(self.show_normal)
-        
+
         hide_action = tray_menu.addAction("隐藏窗口")
         hide_action.triggered.connect(self.hide)
-        
+
         tray_menu.addSeparator()
-        
+
         exit_action = tray_menu.addAction("退出")
         exit_action.triggered.connect(self.close_application)
-        
+
         self.tray_icon.setContextMenu(tray_menu)
         self.tray_icon.activated.connect(self._on_tray_icon_activated)
         self.tray_icon.show()
-        
+
         self._update_tray_menu()
 
     def _update_ui_state(self, running: bool) -> None:
@@ -476,14 +486,14 @@ class FTPMainWindow(QMainWindow):
         try:
             # 使用当前用户创建授权器
             authorizer = self.user_manager.authorizer
-            
+
             # 使用当前设置创建处理器
             handler = WindowsFTPHandler
             handler.authorizer = authorizer
             handler.timeout = self.config.get('general', 'timeout')
             handler.encoding = self.config.get('general', 'encoding')
             handler.utf8 = self.config.get('general', 'encoding').lower() == 'utf-8'
-            
+
             # 创建并启动服务器线程
             self.server_thread = FTPServerThread(
                 handler=handler,
@@ -492,19 +502,19 @@ class FTPMainWindow(QMainWindow):
                 max_connections=self.config.get('general', 'max_connections')
             )
             self.server_thread.start()
-            
+
             # 更新UI并通知用户
             self.signals.server_started.emit()
             self.signals.status_update.emit(f"服务器已在端口 {self.config.get('general', 'port')} 启动")
             self.tray_icon.showMessage(
-                "FTP服务器", 
-                f"服务器已在端口 {self.config.get('general', 'port')} 启动", 
-                QSystemTrayIcon.Information, 
+                "FTP服务器",
+                f"服务器已在端口 {self.config.get('general', 'port')} 启动",
+                QSystemTrayIcon.Information,
                 3000
             )
-            
+
             logging.info(f"服务器已在端口 {self.config.get('general', 'port')} 启动")
-            
+
         except Exception as e:
             logging.error(f"启动服务器失败: {e}")
             self.signals.error_occurred.emit(f"启动服务器失败: {e}")
@@ -517,18 +527,18 @@ class FTPMainWindow(QMainWindow):
                 self.server_thread.stop()
                 self.server_thread.quit()
                 self.server_thread.wait(2000)
-                
+
                 self.signals.server_stopped.emit()
                 self.signals.status_update.emit("服务器已停止")
                 self.tray_icon.showMessage(
-                    "FTP服务器", 
-                    "服务器已停止", 
-                    QSystemTrayIcon.Information, 
+                    "FTP服务器",
+                    "服务器已停止",
+                    QSystemTrayIcon.Information,
                     3000
                 )
-                
+
                 logging.info("服务器已停止")
-                
+
             except Exception as e:
                 logging.error(f"停止服务器时出错: {e}")
                 self.signals.error_occurred.emit(f"停止服务器时出错: {e}")
@@ -536,11 +546,11 @@ class FTPMainWindow(QMainWindow):
     def _select_root_dir(self) -> None:
         """选择新的根目录"""
         path = QFileDialog.getExistingDirectory(
-            self, 
-            "选择根目录", 
+            self,
+            "选择根目录",
             self.config.get('general', 'root_path')
         )
-        
+
         if path:
             self.config.save({
                 'general': {
@@ -562,19 +572,19 @@ class FTPMainWindow(QMainWindow):
                     'save_log': self.save_log_check.isChecked()
                 }
             }
-            
+
             if self.config.save(settings):
                 # 使用新设置重新配置日志
                 self._setup_logging()
-                
+
                 QMessageBox.information(self, "成功", "配置保存成功!")
                 if self.server_thread and self.server_thread.isRunning():
                     QMessageBox.warning(
-                        self, 
-                        "注意", 
+                        self,
+                        "注意",
                         "必须重启服务器才能使更改生效"
                     )
-                
+
         except Exception as e:
             logging.error(f"保存设置失败: {e}")
             self._show_error(f"保存设置失败: {e}")
@@ -628,8 +638,10 @@ class FTPMainWindow(QMainWindow):
             )
             if reply == QMessageBox.No:
                 return
-        
+
         self.tray_icon.hide()
+        if self.server_thread:
+            self._stop_server()
         QApplication.quit()
 
     def closeEvent(self, event) -> None:
@@ -653,22 +665,23 @@ class FTPMainWindow(QMainWindow):
         else:
             event.accept()
 
+
 if __name__ == "__main__":
     try:
         # 配置应用程序
         app = QApplication(sys.argv)
         app.setStyle('Fusion')
         app.setQuitOnLastWindowClosed(False)
-        
+
         # 设置应用程序元数据
         app.setApplicationName("FTP服务器管理工具")
         app.setApplicationVersion("1.0.0")
         app.setOrganizationName("我的公司")
-        
+
         # 创建并显示主窗口
         window = FTPMainWindow()
         window.show()
-        
+
         sys.exit(app.exec_())
     except Exception as e:
         logging.exception("应用程序崩溃: ")
